@@ -105,7 +105,7 @@ or a dictionary with at least the '{CONF_ZHA_TUYA_BROADLINK_IEEE}' device addres
 def cv_controller_data(value: Any) -> Any:
     """Validate a controller_data."""
     value = CONTROLLER_DATA_SCHEMA(value)
-    _LOGGER.info("Valid 'controller_data' value is: %s", str(value))
+    _LOGGER.debug("Valid 'controller_data' value is: %s", str(value))
     return value
 
 def get_controller(hass, controller, encoding, controller_data, delay):
@@ -299,7 +299,7 @@ class ZHATuyaBroadlinkController(AbstractController):
                 try:
                     _command = b64decode(_command)
                     _command = Helper.broadlink2tuya(_command)
-                except Exception as e:
+                except:
                     raise Exception("Error while converting "
                                     "Base64 to Tuya encoding")
 
@@ -323,6 +323,9 @@ class ZHATuyaBroadlinkController(AbstractController):
                                     "Pronto to Tuya encoding")
 
             service_data[ATTR_PARAMS]['code'] = _command
+
+            _LOGGER.debug("Calling service 'zha.issue_zigbee_cluster_command'\nwith 'service_data': %s",
+                          str(service_data))
 
             await self.hass.services.async_call(
                 'zha', 'issue_zigbee_cluster_command', service_data)
