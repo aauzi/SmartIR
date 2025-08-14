@@ -2,10 +2,28 @@ from abc import ABC, abstractmethod
 import asyncio
 from base64 import b64encode, b64decode
 import binascii
+from homeassistant.components.zha.websocket_api import (
+        IEEE_SCHEMA
+)
 import homeassistant.helpers.config_validation as cv
 import requests
 from typing import Any
 import voluptuous as vol
+from zha.application.const import (
+    ATTR_IEEE,
+    ATTR_CLUSTER_ID,
+    ATTR_CLUSTER_TYPE,
+    ATTR_COMMAND,
+    ATTR_COMMAND_TYPE,
+    ATTR_ENDPOINT_ID,
+    ATTR_MANUFACTURER,
+    ATTR_PARAMS,
+
+    CLUSTER_COMMAND_SERVER,
+    CLUSTER_TYPE_IN,
+    CLUSTER_TYPE_OUT
+)
+from zigpy.types.named import EUI64
 import logging
 import json
 
@@ -33,17 +51,60 @@ LOOKIN_COMMANDS_ENCODING = [ENC_PRONTO, ENC_RAW]
 ESPHOME_COMMANDS_ENCODING = [ENC_RAW]
 ZHA_TUYA_BROADLINK_COMMANDS_ENCODING = [ENC_BASE64, ENC_HEX, ENC_PRONTO, ENC_RAW]
 
+CONF_ZHA_TUYA_BROADLINK_IEEE = "tuya-broadlink-ieee"
+CONF_ENDPOINT_ID = ATTR_ENDPOINT_ID
+CONF_CLUSTER_ID = ATTR_CLUSTER_ID
+CONF_CLUSTER_TYPE = ATTR_CLUSTER_TYPE
+CONF_COMMAND = ATTR_COMMAND
+CONF_COMMAND_TYPE = ATTR_COMMAND_TYPE
+CONF_MANUFACTURER = ATTR_MANUFACTURER
+
+ZHA_TUYA_BROADLINK_SERVICE_DATA_DEFAULTS = {
+    ATTR_ENDPOINT_ID: 1,
+    ATTR_CLUSTER_ID: 0xe004,
+    ATTR_CLUSTER_TYPE: CLUSTER_TYPE_IN,
+    ATTR_COMMAND: 2,
+    ATTR_COMMAND_TYPE: CLUSTER_COMMAND_SERVER,
+    ATTR_PARAMS: {}
+}
+
+# allow the renaming of configuration attributes for future evolutions (ie. ZHA, not tuya)
+ZHA_TUYA_BROADLINK_SERVICE_DATA_FROM_CONF = {
+    CONF_ZHA_TUYA_BROADLINK_IEEE: ATTR_IEEE,
+    CONF_ENDPOINT_ID: ATTR_ENDPOINT_ID,
+    CONF_CLUSTER_ID: ATTR_CLUSTER_ID,
+    CONF_CLUSTER_TYPE: ATTR_CLUSTER_TYPE,
+    CONF_COMMAND: ATTR_COMMAND,
+    CONF_COMMAND_TYPE: ATTR_COMMAND_TYPE,
+    CONF_MANUFACTURER: ATTR_MANUFACTURER
+}
+
+ZHA_TUYA_BROADLINK_CONTROLLER_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ZHA_TUYA_BROADLINK_IEEE): vol.All(cv.string, EUI64.convert),
+        vol.Optional(CONF_ENDPOINT_ID): cv.positive_int,
+        vol.Optional(CONF_CLUSTER_ID): cv.positive_int,
+        vol.Optional(CONF_CLUSTER_TYPE): vol.Any(
+            CLUSTER_TYPE_IN, CLUSTER_TYPE_OUT
+        ),
+        vol.Optional(CONF_COMMAND): cv.positive_int,
+        vol.Optional(CONF_COMMAND_TYPE): vol.Any(CLUSTER_COMMAND_SERVER),
+        vol.Optional(CONF_MANUFACTURER): vol.All(
+            vol.Coerce(int), vol.Range(min=-1)
+        ),
+    },
+)
+
+CONTROLLER_DATA_SCHEMA = vol.Union(
+    ZHA_TUYA_BROADLINK_CONTROLLER_DATA_SCHEMA,
+    vol.Schema(cv.string),
+    msg=f"""value should be a string
+or a dictionary with at least the '{CONF_ZHA_TUYA_BROADLINK_IEEE}' device address\n"""
+)
+
 def cv_controller_data(value: Any) -> Any:
     """Validate a controller_data."""
-
-    try:
-        return cv.string(value)
-    except vol.Invalid:
-        if not isinstance(value, dict):
-            raise vol.Invalid("value should be a string or a dict")
-
-    return dict(value)
-
+    return CONTROLLER_DATA_SCHEMA(value) 
 
 def get_controller(hass, controller, encoding, controller_data, delay):
     """Return a controller compatible with the specification provided."""
@@ -57,7 +118,7 @@ def get_controller(hass, controller, encoding, controller_data, delay):
     }
     try:
         if controller in (BROADLINK_CONTROLLER, ZHA_TUYA_BROADLINK_CONTROLLER):
-            if isinstance(controller_data, dict) and 'ieee' in controller_data:
+            if isinstance(controller_data, dict) and CONF_ZHA_TUYA_BROADLINK_IEEE in controller_data:
                 controller = ZHA_TUYA_BROADLINK_CONTROLLER
         return controllers[controller](hass, controller, encoding, controller_data, delay)
     except KeyError:
@@ -213,17 +274,10 @@ class ZHATuyaBroadlinkController(AbstractController):
     def __init__(self, hass, controller, encoding, controller_data, delay):
         super().__init__(hass, controller, encoding, controller_data, delay)
 
-        self._service_data = {
-            'ieee': self._controller_data['ieee'],
-            'endpoint_id': self._controller_data.get('endpoint_id', 1),
-            'cluster_id': self._controller_data.get('cluster_id', 0xe004),
-            'cluster_type': self._controller_data.get('cluster_type', 'in'),
-            'command': self._controller_data.get('command', 2),
-            'command_type': self._controller_data.get('command_type', 'server'),
-            'params': {
-                'code': None
-            }
-        }
+        self._service_data = dict(ZHA_TUYA_BROADLINK_SERVICE_DATA_DEFAULTS)
+        for kc, v in self._controller_data.items():
+            ks = ZHA_TUYA_BROADLINK_SERVICE_DATA_FROM_CONF[kc]
+            self._service_data[ks] = v 
 
     def check_encoding(self, encoding):
         """Check if the encoding is supported by the controller."""
@@ -266,7 +320,7 @@ class ZHATuyaBroadlinkController(AbstractController):
                     raise Exception("Error while converting "
                                     "Pronto to Tuya encoding")
 
-            service_data['params']['code'] = _command
+            service_data[ATTR_PARAMS]['code'] = _command
 
             await self.hass.services.async_call(
                 'zha', 'issue_zigbee_cluster_command', service_data)

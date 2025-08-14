@@ -74,17 +74,18 @@ It that case, the `controlled_data` configuration attribute must contain the Zig
 ```yaml
 climate:
   - platform: smartir
-	device_code: 1287
+    device_code: 1287
     controller_data: 
-	  ieee: "xx:xx:xx:xx:xx:xx:xx:xx"
-	  # endpoint_id: 1
-	  # cluster_id: 0xe004
-	  # cluster_type: "in"
-	  # command: 2
-	  # command_type: "server"
+      tuya-broadlink-ieee: "xx:xx:xx:xx:xx:xx:xx:xx"
+      # endpoint_id: 1
+      # cluster_id: 0xe004
+      # cluster_type: "in"
+      # command: 2
+      # command_type: "server"
+      # manufacturer: <code>
 ```
 
-**Note**: the attribute `ieee` entity Zigbee address is required whereas the other `service_data` attributes (`endpoint_id`, `cluster_id`, `command`, etc...) are optional.
+**Note**: the attribute `tuya-broadlink-ieee` device Zigbee address is required whereas the other `service_data` attributes (`endpoint_id`, `cluster_id`, `command`, etc...) are optional.
 The commented out examples are the default settings. They correspond to a TS1201 device.
 
 One can also use the additional ``ZHATuyaBroadlink`` platform in code json files.
