@@ -81,7 +81,7 @@ ZHA_TUYA_BROADLINK_SERVICE_DATA_FROM_CONF = {
 
 ZHA_TUYA_BROADLINK_CONTROLLER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_ZHA_TUYA_BROADLINK_IEEE): vol.All(cv.string, EUI64.convert),
+        vol.Required(CONF_ZHA_TUYA_BROADLINK_IEEE): vol.All(cv.string, EUI64.convert, repr),
         vol.Optional(CONF_ENDPOINT_ID): cv.positive_int,
         vol.Optional(CONF_CLUSTER_ID): cv.positive_int,
         vol.Optional(CONF_CLUSTER_TYPE): vol.Any(
@@ -104,7 +104,9 @@ or a dictionary with at least the '{CONF_ZHA_TUYA_BROADLINK_IEEE}' device addres
 
 def cv_controller_data(value: Any) -> Any:
     """Validate a controller_data."""
-    return CONTROLLER_DATA_SCHEMA(value) 
+    value = CONTROLLER_DATA_SCHEMA(value)
+    _LOGGER.info("Valid 'controller_data' value is: %s", str(value))
+    return value
 
 def get_controller(hass, controller, encoding, controller_data, delay):
     """Return a controller compatible with the specification provided."""
